@@ -1,7 +1,8 @@
 import torch
-import torch.nn as nn
 from torch.optim import Adam
-from torch.utils.data import Dataset, DataLoader
+from torch.utils.data import Dataset, DataLoader, random_split
+from face_dataset.face_models import VAE, ConvolutionalVAE
+
 import os
 from PIL import Image
 import numpy as np
@@ -13,6 +14,9 @@ LOG_SQRT_2PI = np.log(np.sqrt(2 * np.pi))
 
 USE_CUDA = torch.cuda.is_available()
 DTYPE = torch.cuda.FloatTensor if USE_CUDA else torch.FloatTensor
+
+SEED = 0xDEADF00D
+TEST_SIZE = .2
 
 
 class MyFaceDataset(Dataset):
@@ -26,6 +30,7 @@ class MyFaceDataset(Dataset):
                       if os.path.isfile(os.path.join(data_path, f))]
         images = [np.asarray(Image.open(file).resize([IMAGE_SIZE, IMAGE_SIZE])).transpose([2, 0, 1]) / 255.
                   for file in file_names]
+        random.Random(SEED).shuffle(images)
         return torch.tensor(images)
 
     def __len__(self):
@@ -33,45 +38,6 @@ class MyFaceDataset(Dataset):
 
     def __getitem__(self, idx):
         return self.images[idx]
-
-
-class VAE(nn.Module):
-    def __init__(self, image_size, embedding_size):
-        super().__init__()
-        self.input_size = image_size * image_size * 3
-        self.intermediate_size = int(image_size * image_size * 3 / 2)
-
-        self.fc1 = nn.Linear(self.input_size, self.intermediate_size)
-        self.fc2_1 = nn.Linear(self.intermediate_size, embedding_size)
-        self.fc2_2 = nn.Linear(self.intermediate_size, embedding_size)
-        self.fc3 = nn.Linear(embedding_size, self.intermediate_size)
-        self.fc4_1 = nn.Linear(self.intermediate_size, self.input_size)
-        self.fc4_2 = nn.Linear(self.intermediate_size, self.input_size)
-
-    def gaussian_sampler(self, mu, logsigma):
-        if self.training:
-            std = logsigma.exp()
-            eps = torch.randn(*std.shape).type(DTYPE)
-            return eps.mul(std).add(mu)
-        else:
-            return mu
-
-    def encode(self, x):
-        h1 = self.fc1(x)
-        return self.fc2_1(h1), self.fc2_2(h1)
-
-    def decode(self, x):
-        h3 = self.fc3(x)
-        return self.fc4_1(h3), self.fc4_2(h3)
-
-    def forward(self, x):
-        flattened_view_x = x.view(-1, self.input_size)
-
-        latent_mu, latent_logsigma = self.encode(flattened_view_x)
-        latent_sample = self.gaussian_sampler(latent_mu, latent_logsigma)
-        reconstruction_mu, reconstruction_logsigma = self.decode(latent_sample)
-
-        return reconstruction_mu, reconstruction_logsigma, latent_mu, latent_logsigma
 
 
 #####################################################################################
@@ -89,6 +55,12 @@ def log_likelihood(x, mu, logsigma):
 
 
 def loss_vae(x, mu_gen, logsigma_gen, mu_z, logsigma_z):
+    assert mu_gen.shape == logsigma_gen.shape
+    assert mu_z.shape == logsigma_z.shape
+
+    if len(mu_gen.shape) > 2:
+        mu_gen = mu_gen.view(mu_gen.shape[0], -1)
+        logsigma_gen = logsigma_gen.view(logsigma_gen.shape[0], -1)
     kl = KL_divergence(mu_z, logsigma_z)
     likelihood = log_likelihood(x, mu_gen, logsigma_gen)
     loss = torch.mean(kl - likelihood)
@@ -96,38 +68,56 @@ def loss_vae(x, mu_gen, logsigma_gen, mu_z, logsigma_z):
 #####################################################################################
 
 
-def train_model(model, dataset, batch_size, num_epochs, lr):
-    face_loader = DataLoader(dataset, batch_size=batch_size, shuffle=True,
-                             drop_last=False, num_workers=5)
+def train_model(model, train_data, val_data, batch_size, num_epochs, lr):
+    train_loader = DataLoader(train_data, batch_size=batch_size, shuffle=True,
+                              drop_last=False, num_workers=5)
+    val_loader = DataLoader(val_data, batch_size=batch_size, shuffle=True,
+                            drop_last=False, num_workers=5)
     model = model.cuda() if USE_CUDA else model
     opt = Adam(model.parameters(), lr=lr)
 
-    train_loss, test_loss = [], []
+    train_loss, val_loss = [], []
 
     for i in range(num_epochs):
         tmp_train_loss, tmp_test_loss = [], []
 
         model.train()
-        for batch in face_loader:
+        for batch in train_loader:
             opt.zero_grad()
             cuda_batch = batch.type(DTYPE)
             result = model(cuda_batch)
             loss = loss_vae(cuda_batch.view(-1, 3 * IMAGE_SIZE ** 2), *result)
             loss.backward()
             opt.step()
-            tmp_train_loss.append(loss.item())
+            tmp_train_loss.append(-loss.item())
 
         model.eval()
-        for batch in face_loader:
+        for batch in val_loader:
             with torch.no_grad():
                 cuda_batch = batch.type(DTYPE)
                 result = model(cuda_batch)
                 loss = loss_vae(cuda_batch.view(-1, 3 * IMAGE_SIZE ** 2), *result)
-                tmp_test_loss.append(loss.item())
+                tmp_test_loss.append(-loss.item())
 
         train_loss.append(np.mean(tmp_train_loss))
-        test_loss.append(np.mean(tmp_test_loss))
-        print(f'[INFO] Iter: {i}, Train loss: {train_loss[-1]}, Val loss: {test_loss[-1]}')
+        val_loss.append(np.mean(tmp_test_loss))
+        print(f'[INFO] Iter: {i}, Train loss: {train_loss[-1]}, Val loss: {val_loss[-1]}')
+
+    # Plot train loss
+    fig = plt.figure()
+    plt.plot(train_loss)
+    fig.suptitle('Train loss')
+    plt.xlabel('epoch')
+    plt.ylabel('lower bound')
+    plt.show()
+
+    # Plot val loss
+    fig = plt.figure()
+    plt.plot(val_loss)
+    fig.suptitle('Val loss')
+    plt.xlabel('epoch')
+    plt.ylabel('lower bound')
+    plt.show()
 
 
 def plot_gallery(images, n_row, n_col):
@@ -135,7 +125,7 @@ def plot_gallery(images, n_row, n_col):
     plt.subplots_adjust(bottom=0, left=.01, right=.99, top=.90, hspace=.35)
     for i in range(n_row * n_col):
         plt.subplot(n_row, n_col, i + 1)
-        plt.imshow(images[i].transpose([1, 2, 0]), cmap=plt.cm.gray, vmin=-1, vmax=1, interpolation='nearest')
+        plt.imshow(images[i].transpose([1, 2, 0]), vmin=-1, vmax=1, interpolation='nearest')
         plt.xticks(())
         plt.yticks(())
     plt.show()
@@ -165,8 +155,13 @@ def morph_images(model, dataset, left_img_idx, right_img_idx):
 
 
 if __name__ == '__main__':
+    torch.manual_seed(SEED)
+
     data_path = '/home/maxim/python/videofake/data/face_videos/faces'
     dataset = MyFaceDataset(data_path)
+    train_size, test_size = len(dataset) - int(len(dataset) * TEST_SIZE), int(len(dataset) * TEST_SIZE)
+    train_data, val_data = random_split(dataset, [train_size, test_size],
+                                        generator=torch.Generator().manual_seed(SEED))
 
     train_params = {
         'num_epochs': 200,
@@ -175,10 +170,11 @@ if __name__ == '__main__':
     }
     hparams = {
         'embedding_size': 512,
+        'num_filters': 32,
     }
 
-    model = VAE(IMAGE_SIZE, **hparams)
-    train_model(model, dataset, **train_params)
+    model = ConvolutionalVAE(IMAGE_SIZE, **hparams)
+    train_model(model, train_data, val_data, **train_params)
 
-    plot_results(model, 5, dataset)
-    morph_images(model, dataset, 10, 20)
+    plot_results(model, 5, val_data)
+    morph_images(model, val_data, 10, 20)
