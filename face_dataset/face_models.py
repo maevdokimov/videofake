@@ -57,18 +57,18 @@ class ConvolutionalVAE(nn.Module):
             raise ValueError(f'Unknown nonlinearity {nonlinearity}')
         self.image_size = image_size
         self.kernel_size = kernel_size
+        self.num_filters = num_filters
 
         self.conv1 = nn.Sequential(
-            nn.Conv2d(3, num_filters, kernel_size),
+            nn.Conv2d(3, num_filters, kernel_size, padding=1),
             self.nonlinearity,
-            nn.Conv2d(num_filters, 2 * num_filters, kernel_size),
+            nn.Conv2d(num_filters, 2 * num_filters, kernel_size, padding=1),
             self.nonlinearity,
-            nn.Conv2d(2 * num_filters, 2 * num_filters, kernel_size),
+            nn.Conv2d(2 * num_filters, 2 * num_filters, kernel_size, padding=1),
             self.nonlinearity
         )
 
-        self.out_side = image_size - 3 * (kernel_size - 1)
-        out_shape = 2 * num_filters * self.out_side ** 2
+        out_shape = 2 * num_filters * (image_size ** 2)
 
         self.linear_mu = nn.Linear(out_shape, embedding_size)
         self.linear_logsigma = nn.Linear(out_shape, embedding_size)
@@ -77,19 +77,19 @@ class ConvolutionalVAE(nn.Module):
         self.reconstruction_logsigma = nn.Linear(embedding_size, out_shape)
 
         self.deconv_mu = nn.Sequential(
-            nn.ConvTranspose2d(2 * num_filters, 2 * num_filters, kernel_size),
+            nn.ConvTranspose2d(2 * num_filters, 2 * num_filters, kernel_size, padding=1),
             self.nonlinearity,
-            nn.ConvTranspose2d(2 * num_filters, num_filters, kernel_size),
+            nn.ConvTranspose2d(2 * num_filters, num_filters, kernel_size, padding=1),
             self.nonlinearity,
-            nn.ConvTranspose2d(num_filters, 3, kernel_size)
+            nn.ConvTranspose2d(num_filters, 3, kernel_size, padding=1)
         )
 
         self.deconv_logsigma = nn.Sequential(
-            nn.ConvTranspose2d(2 * num_filters, 2 * num_filters, kernel_size),
+            nn.ConvTranspose2d(2 * num_filters, 2 * num_filters, kernel_size, padding=1),
             self.nonlinearity,
-            nn.ConvTranspose2d(2 * num_filters, num_filters, kernel_size),
+            nn.ConvTranspose2d(2 * num_filters, num_filters, kernel_size, padding=1),
             self.nonlinearity,
-            nn.ConvTranspose2d(num_filters, 3, kernel_size)
+            nn.ConvTranspose2d(num_filters, 3, kernel_size, padding=1)
         )
 
     def gaussian_sampler(self, mu, logsigma):
@@ -109,8 +109,8 @@ class ConvolutionalVAE(nn.Module):
 
     def decode(self, x):
         mu, logsigma = self.reconstruction_mu(x), self.reconstruction_logsigma(x)
-        mu = mu.view(mu.shape[0], self.image_size * 2, self.out_side, self.out_side)
-        logsigma = logsigma.view(mu.shape[0], self.image_size * 2, self.out_side, self.out_side)
+        mu = mu.view(mu.shape[0], self.num_filters * 2, self.image_size, self.image_size)
+        logsigma = logsigma.view(mu.shape[0], self.num_filters * 2, self.image_size, self.image_size)
         mu, logsigma = self.deconv_mu(mu), self.deconv_logsigma(logsigma)
         return mu, logsigma
 
@@ -123,7 +123,9 @@ class ConvolutionalVAE(nn.Module):
 
 
 if __name__ == '__main__':
-    t = torch.randn(5, 3, 32, 32)
-    model = ConvolutionalVAE(32, 32, 512)
+    t = torch.randn(5, 3, 64, 64)
+    model = ConvolutionalVAE(64, 32, 512)
     res = model(t)
     print([tens.shape for tens in res])
+    model = model.cuda()
+    t = t.cuda()
