@@ -3,13 +3,15 @@ from torch.optim import Adam
 from torch.utils.data import Dataset, DataLoader, random_split
 from face_dataset.face_models import VAE, ConvolutionalVAE
 
+from typing import List
 import os
 from PIL import Image
 import numpy as np
 import matplotlib.pyplot as plt
 import random
+from time import time
 
-IMAGE_SIZE = 32
+IMAGE_SIZE = 128
 LOG_SQRT_2PI = np.log(np.sqrt(2 * np.pi))
 
 USE_CUDA = torch.cuda.is_available()
@@ -30,6 +32,30 @@ class MyFaceDataset(Dataset):
                       if os.path.isfile(os.path.join(data_path, f))]
         images = [np.asarray(Image.open(file).resize([IMAGE_SIZE, IMAGE_SIZE])).transpose([2, 0, 1]) / 255.
                   for file in file_names]
+        random.Random(SEED).shuffle(images)
+        return torch.tensor(images)
+
+    def __len__(self):
+        return self.images.shape[0]
+
+    def __getitem__(self, idx):
+        return self.images[idx]
+
+
+class FacesDataset(Dataset):
+    def __init__(self, paths: List[str], thinning_coefs: List[float]):
+        super().__init__()
+        self.images = self.load_images(paths, thinning_coefs)
+
+    @staticmethod
+    def load_images(paths, thinning_coefs):
+        images = []
+        for path, coef in zip(paths, thinning_coefs):
+            file_names = [os.path.join(path, f) for f in os.listdir(path)
+                          if os.path.isfile(os.path.join(path, f))]
+            file_names = file_names[::int(1 / coef)]
+            images.extend([np.asarray(Image.open(file).resize([IMAGE_SIZE, IMAGE_SIZE])).transpose([2, 0, 1]) / 255.
+                           for file in file_names])
         random.Random(SEED).shuffle(images)
         return torch.tensor(images)
 
@@ -76,8 +102,8 @@ def train_model(model, train_data, val_data, batch_size, num_epochs, lr):
     model = model.cuda() if USE_CUDA else model
     opt = Adam(model.parameters(), lr=lr)
 
+    start_time = time()
     train_loss, val_loss = [], []
-
     for i in range(num_epochs):
         tmp_train_loss, tmp_test_loss = [], []
 
@@ -103,6 +129,7 @@ def train_model(model, train_data, val_data, batch_size, num_epochs, lr):
         val_loss.append(np.mean(tmp_test_loss))
         print(f'[INFO] Iter: {i}, Train loss: {train_loss[-1]}, Val loss: {val_loss[-1]}')
 
+    print(f'Training took {time() - start_time} seconds.')
     # Plot train loss
     fig = plt.figure()
     plt.plot(train_loss)
@@ -157,16 +184,17 @@ def morph_images(model, dataset, left_img_idx, right_img_idx):
 if __name__ == '__main__':
     torch.manual_seed(SEED)
 
-    data_path = '/home/maxim/python/videofake/data/face_videos/faces'
-    dataset = MyFaceDataset(data_path)
+    data_path = 'data/faces'
+    den_data_path = 'data/den_faces_2'
+    dataset = FacesDataset([data_path, den_data_path], [1, 0.5])
     train_size, test_size = len(dataset) - int(len(dataset) * TEST_SIZE), int(len(dataset) * TEST_SIZE)
     train_data, val_data = random_split(dataset, [train_size, test_size],
                                         generator=torch.Generator().manual_seed(SEED))
 
     train_params = {
-        'num_epochs': 200,
-        'batch_size': 16,
-        'lr': 0.000003,
+        'num_epochs': 20,
+        'batch_size': 8,
+        'lr': 0.00007,
     }
     hparams = {
         'embedding_size': 512,
