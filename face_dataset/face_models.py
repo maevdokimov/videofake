@@ -1,6 +1,5 @@
 import torch
 import torch.nn as nn
-from copy import deepcopy
 
 
 class VAE(nn.Module):
@@ -161,5 +160,3 @@ if __name__ == '__main__':
     model = ConvolutionalVAE(128, 32, 512).cuda()
     res = model(t)
     print([tens.shape for tens in res])
-    # model = model.cuda()
-    # t = t.cuda()

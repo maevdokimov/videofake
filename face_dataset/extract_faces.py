@@ -35,9 +35,9 @@ def process_video(vid_path: str, xml_path: str, out_path: str):
 
 
 if __name__ == '__main__':
-    path = '/home/maxim/python/videofake/data/face_videos'
-    xml_path = '/home/maxim/python/videofake/data/cascade_xml/haarcascade_frontalface_default.xml'
-    out_path = '/home/maxim/python/videofake/data/face_videos/faces'
+    path = 'data/den_face_videos'
+    xml_path = 'data/cascade_xml/haarcascade_frontalface_default.xml'
+    out_path = 'data/den_faces'
     
     for entry in os.listdir(path):
         file_path = os.path.join(path, entry)
