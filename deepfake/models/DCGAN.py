@@ -14,10 +14,7 @@ class Generator(nn.Module):
     def __init__(self):
         super().__init__()
         self.deconv_block = nn.Sequential(
-            nn.ConvTranspose2d(1024, 1024, kernel_size=4, stride=1, padding=0, bias=False),
-            nn.BatchNorm2d(1024),
-            nn.ReLU(inplace=True),
-            nn.ConvTranspose2d(1024, 512, kernel_size=4, stride=2, padding=1, bias=False),
+            nn.ConvTranspose2d(100, 512, kernel_size=4, stride=1, padding=0, bias=False),
             nn.BatchNorm2d(512),
             nn.ReLU(inplace=True),
             nn.ConvTranspose2d(512, 256, kernel_size=4, stride=2, padding=1, bias=False),
@@ -26,7 +23,10 @@ class Generator(nn.Module):
             nn.ConvTranspose2d(256, 128, kernel_size=4, stride=2, padding=1, bias=False),
             nn.BatchNorm2d(128),
             nn.ReLU(inplace=True),
-            nn.ConvTranspose2d(128, 3, kernel_size=4, stride=2, padding=1, bias=False),
+            nn.ConvTranspose2d(128, 64, kernel_size=4, stride=2, padding=1, bias=False),
+            nn.BatchNorm2d(64),
+            nn.ReLU(inplace=True),
+            nn.ConvTranspose2d(64, 3, kernel_size=4, stride=2, padding=1, bias=False),
             nn.Tanh(),
         )
         self.deconv_block.apply(init_wights)
