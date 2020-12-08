@@ -35,28 +35,27 @@ class Generator(nn.Module):
         return self.deconv_block(input)
 
 
-# class Discriminator(nn.Module):
-#     def __init__(self):
-#         super().__init__()
-#         self.conv_block = nn.Sequential(
-#             nn.Conv2d(3, 64, kernel_size=4, stride=2, padding=1, bias=False),
-#             nn.LeakyReLU(0.2, inplace=True),
-#             nn.Conv2d(64, 64, kernel_size=4, stride=2, padding=1, bias=False),
-#             nn.BatchNorm2d(64),
-#             nn.LeakyReLU(0.2, inplace=True),
-#             nn.Conv2d(64, 64, kernel_size=4, stride=2, padding=1, bias=False),
-#             nn.BatchNorm2d(64),
-#             nn.LeakyReLU(0.2, inplace=True),
-#             nn.Conv2d(64, 64, kernel_size=4, stride=2, padding=1, bias=False),
-#             nn.BatchNorm2d(64),
-#             nn.LeakyReLU(0.2, inplace=True),
-#             nn.Conv2d(64, 1, kernel_size=4, stride=1, padding=0, bias=False),
-#             nn.Sigmoid(),
-#         )
-#         self.conv_block.apply(init_wights)
-#
-#     def forward(self, input):
-#         return self.conv_block(input)
+class Encoder(nn.Module):
+    def __init__(self):
+        super().__init__()
+        self.conv_block = nn.Sequential(
+            nn.Conv2d(3, 64, kernel_size=4, stride=2, padding=1, bias=False),
+            nn.LeakyReLU(0.2, inplace=True),
+            nn.Conv2d(64, 128, kernel_size=4, stride=2, padding=1, bias=False),
+            nn.BatchNorm2d(128),
+            nn.LeakyReLU(0.2, inplace=True),
+            nn.Conv2d(128, 256, kernel_size=4, stride=2, padding=1, bias=False),
+            nn.BatchNorm2d(256),
+            nn.LeakyReLU(0.2, inplace=True),
+            nn.Conv2d(256, 512, kernel_size=4, stride=2, padding=1, bias=False),
+            nn.BatchNorm2d(512),
+            nn.LeakyReLU(0.2, inplace=True),
+            nn.Conv2d(512, 100, kernel_size=4, stride=1, padding=0, bias=False),
+        )
+        self.conv_block.apply(init_wights)
+
+    def forward(self, input):
+        return self.conv_block(input)
 
 
 class Discriminator(nn.Module):
@@ -83,9 +82,32 @@ class Discriminator(nn.Module):
         return self.conv_block(input)
 
 
+class DiscriminatorAAE(nn.Module):
+    def __init__(self):
+        super().__init__()
+        self.linear_block = nn.Sequential(
+            nn.Linear(100, 4096),
+            nn.ReLU(),
+            nn.BatchNorm1d(4096),
+            nn.Linear(4096, 4096),
+            nn.ReLU(),
+            nn.BatchNorm1d(4096),
+            nn.Linear(4096, 4096),
+            nn.ReLU(),
+            nn.BatchNorm1d(4096),
+            nn.Linear(4096, 1),
+            nn.Sigmoid(),
+        )
+
+    def forward(self, input):
+        return self.linear_block(input.squeeze())
+
+
 if __name__ == '__main__':
     z = torch.randn(32, 100, 1, 1)
     gen = Generator()
     discr = Discriminator()
+    encoder = Encoder()
     assert gen(z).shape == (32, 3, 64, 64)
     assert discr(gen(z)).squeeze().shape == (32,)
+    assert encoder(gen(z)).shape == (32, 100, 1, 1)
