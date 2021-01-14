@@ -3,7 +3,7 @@ import torch
 from torch.utils.data import ConcatDataset, DataLoader
 from torch.optim import Adam
 
-from deepfake.models.ConvolutionalVAE import DeepfakeVAE
+from deepfake.misc.models.ConvolutionalVAE import DeepfakeVAE
 from face_dataset.face_autoencoder import loss_vae, construct_dataset
 from face_dataset.utils import FacesDataset, plot_gallery
 
