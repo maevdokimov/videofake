@@ -67,7 +67,7 @@ def process_frame(face_model: FaceAlignment, image_path: Path, out_path: Path):
     img = img[y:y + h, x:x + w, :]
 
     detected_faces[0][:-1] = np.array([0, 0, w, h])
-    landmarks = fa.get_landmarks_from_image(img, detected_faces)[0]
+    landmarks = face_model.get_landmarks_from_image(img, detected_faces)[0]
     mask = np.clip(get_image_hull_mask(img.shape, landmarks), 0, 1)
 
     image_name = image_path.absolute().stem
