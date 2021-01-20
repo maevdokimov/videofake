@@ -1,8 +1,8 @@
 import torch
 from torch.optim import Adam
 from torch.utils.data import DataLoader, random_split
-from face_dataset.face_models import ConvolutionalVAE
-from face_dataset.utils import FacesDataset, plot_results
+from face_dataset.misc.face_models import ConvolutionalVAE
+from face_dataset.misc.utils import FacesDataset, plot_results
 
 import numpy as np
 import matplotlib.pyplot as plt
