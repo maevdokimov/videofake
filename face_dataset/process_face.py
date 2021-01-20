@@ -2,6 +2,8 @@ from face_alignment import FaceAlignment, LandmarksType
 import cv2
 from pathlib import Path
 import numpy as np
+import argparse
+from tqdm import tqdm
 
 
 def expand_eyebrows(lmrks, eyebrows_expand_mod=1.0):
@@ -61,8 +63,11 @@ def xyxy_to_xywh(bbox, numpy=True):
 
 
 def process_frame(face_model: FaceAlignment, image_path: Path, out_path: Path):
-    img = cv2.imread(image_path)
+    img = cv2.imread(str(image_path))
     detected_faces = face_model.face_detector.detect_from_image(img.copy())
+    if len(detected_faces) > 1:
+        detected_faces = [sorted(detected_faces, key=lambda face: face[-1])[-1]]
+    if len(detected_faces) == 0: return
     x, y, w, h = xyxy_to_xywh(detected_faces[0][:-1])
     img = img[y:y + h, x:x + w, :]
 
@@ -87,10 +92,16 @@ def process_folder(input_path, output_path):
         raise ValueError(f'No such folder {output_path}')
 
     fa = FaceAlignment(LandmarksType._2D, flip_input=False)
-    for img_path in input_path.iterdir():
+    for img_path in tqdm(input_path.iterdir()):
         process_frame(fa, img_path, output_path)
 
 
 if __name__ == '__main__':
-    pass
+    parser = argparse.ArgumentParser()
+    parser.add_argument('--source', required=True)
+    parser.add_argument('--output', required=True)
+    args = parser.parse_args()
+
+    process_folder(args.source, args.output)
+
 
