@@ -29,6 +29,12 @@ class DownscaleBlock(nn.Module):
             self.downs.append(Downscale(in_ch, out_ch, kernel_size=kernel_size))
             in_ch, out_ch = out_ch, out_ch * 2
 
+    def cuda(self, **kwargs):
+        super().cuda()
+        for i in range(len(self.downs)):
+            self.downs[i] = self.downs[i].cuda()
+        return self
+
     def forward(self, x):
         for down in self.downs:
             x = down(x)
@@ -77,6 +83,11 @@ class Encoder(nn.Module):
         self.e_ch = e_ch
 
         self.down = DownscaleBlock(self.in_ch, self.e_ch, n_downscales=4, kernel_size=5)
+
+    def cuda(self, **kwargs):
+        super().cuda()
+        self.down = self.down.cuda()
+        return self
 
     def forward(self, x):
         return torch.flatten(self.down(x), start_dim=1)

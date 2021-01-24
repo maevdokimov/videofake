@@ -22,7 +22,8 @@ default_options = {
     'SAE': default_param,
     'resolution': 64,
     'optimizer': Adam,
-    'lr': 5e-5
+    'lr': 5e-5,
+    'gpu': True
 }
 
 
@@ -53,6 +54,7 @@ def init_model(model_name, options):
     if model_name == 'SAE':
         param_dict = options[model_name]
         resolution = options['resolution']
+        use_cuda = options['gpu']
 
         encoder = Encoder(3, param_dict['encoder_dims'])
         encoder_out_shape = encoder.get_out_shape(resolution)
@@ -61,6 +63,11 @@ def init_model(model_name, options):
         inter_out_ch = inter.get_out_ch()
         decoder_src = Decoder(inter_out_ch, param_dict['decoder_dims'], param_dict['decoder_mask_dims'])
         decoder_dst = Decoder(inter_out_ch, param_dict['decoder_dims'], param_dict['decoder_mask_dims'])
+        if use_cuda:
+            encoder = encoder.cuda()
+            inter = inter.cuda()
+            decoder_src = decoder_src.cuda()
+            decoder_dst = decoder_dst.cuda()
 
         opt = options['optimizer'](list(chain(*[encoder.parameters(), inter.parameters(), decoder_src.parameters(),
                                                 decoder_dst.parameters()])), lr=options['lr'])
@@ -71,7 +78,7 @@ def init_model(model_name, options):
         raise ValueError(f"Unknown model name {model_name}")
 
 
-def init_data(data_path: Path, image_size: int, batch_size: int, num_workers: int = 8):
+def init_data(data_path: Path, image_size: int, batch_size: int, num_workers: int = 0):
     d = defaultdict(lambda: [None, None])
 
     for p in data_path.iterdir():
@@ -83,7 +90,7 @@ def init_data(data_path: Path, image_size: int, batch_size: int, num_workers: in
 
     img_mask_pairs = [[img, mask] for img, mask in d.values()]
     dataset = MaskedDataset(img_mask_pairs, resolution=image_size)
-    return DataLoader(dataset, batch_size=batch_size, num_workers=num_workers)
+    return DataLoader(dataset, batch_size=batch_size, shuffle=True, num_workers=num_workers, drop_last=True)
 
 
 if __name__ == '__main__':
