@@ -22,7 +22,7 @@ class Downscale(nn.Module):
 class DownscaleBlock(nn.Module):
     def __init__(self, in_ch, ch, n_downscales, kernel_size):
         super().__init__()
-        self.downs = []
+        self.downs = nn.ModuleList([])
 
         out_ch = ch
         for i in range(n_downscales):
