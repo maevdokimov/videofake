@@ -1,14 +1,12 @@
-from itertools import chain
 from pathlib import Path
-from collections import defaultdict
 import numpy as np
 import torch
 from torch.optim import Adam
-from torch.utils.data import Dataset, DataLoader
+from torch.utils.data import Dataset
 from PIL import Image
 from skimage.transform import resize
-
-from deepfake.models.SAEHD import Encoder, Inter, Decoder
+import random
+from collections import defaultdict
 
 
 default_param = {
@@ -26,71 +24,64 @@ default_options = {
     'gpu': True
 }
 
+# -----------------------------------------------------------------
+# -----------------------------------------------------------------
+# -----------------------------------------------------------------
 
-class MaskedDataset(Dataset):
-    def __init__(self, img_mask_pairs, resolution):
+PossibleImageExt = ['.png', '.jpg']
+
+
+class PairedDataset(Dataset):
+    def __init__(self, src_path: Path, dst_path: Path, resolution):
         super().__init__()
+        if not src_path.exists():
+            raise ValueError(f'Src path {src_path} does not exist')
+        if not dst_path.exists():
+            raise ValueError(f'Dst path {dst_path} does not exist')
+
+        self.src_path = src_path
+        self.dst_path = dst_path
         self.resolution = resolution
 
-        self.faces, self.masks = self.construct_tensor(img_mask_pairs)
+        self.src_idx, self.src_len = self.index_folder(src_path)
+        self.dst_idx, self.dst_len = self.index_folder(dst_path)
+        self.idx_map = None
+        self.resample()
 
-    def construct_tensor(self, img_mask_pairs):
-        faces = torch.zeros(len(img_mask_pairs), 3, self.resolution, self.resolution)
-        masks = torch.zeros(len(img_mask_pairs), 1, self.resolution, self.resolution)
-        for i, (face, mask) in enumerate(img_mask_pairs):
-            faces[i] = torch.from_numpy(face.transpose(2, 0, 1)).type(torch.FloatTensor)
-            masks[i] = torch.from_numpy(mask.transpose(2, 0, 1)).type(torch.FloatTensor)
+    def index_folder(self, path: Path):
+        index = defaultdict(lambda: [None, None])
+        for p in path.iterdir():
+            stem, ext = p.stem, p.suffix
+            if ext in PossibleImageExt:
+                index[int(stem)][0] = p
+            elif ext == '.npy':
+                index[int(stem)][1] = p
 
-        return faces, masks
+        return index, len(list(filter(lambda x: index[x][0] is not None and index[x][1] is not None, index.keys())))
+
+    def resample(self):
+        if self.src_len == self.dst_len:
+            self.idx_map = None
+            return self.idx_map
+        max_len = max(self.src_len, self.dst_len)
+        idx_list = list(range(max_len))
+        random.shuffle(idx_list)
+        self.idx_map = {i: idx for i, idx in zip(range(max_len), idx_list)}
+        return self.idx_map
+
+    def preprocess_pair(self, img_path: Path, mask_path: Path):
+        img = resize(np.asarray(Image.open(img_path)), (self.resolution, self.resolution, 3))
+        img = torch.from_numpy(img.transpose(2, 0, 1)).float()
+        mask = resize(np.load(str(mask_path)), (self.resolution, self.resolution, 1))
+        mask = torch.from_numpy(mask.transpose(2, 0, 1)).float()
+
+        return img, mask
 
     def __len__(self):
-        return self.faces.shape[0]
+        return min(self.src_len, self.dst_len)
 
     def __getitem__(self, idx):
-        return self.faces[idx], self.masks[idx]
-
-
-def init_model(model_name, options):
-    if model_name == 'SAE':
-        param_dict = options[model_name]
-        resolution = options['resolution']
-        use_cuda = options['gpu']
-
-        encoder = Encoder(3, param_dict['encoder_dims'])
-        encoder_out_shape = encoder.get_out_shape(resolution)
-        inter = Inter(np.prod(encoder_out_shape), param_dict['inter_dims'],
-                      param_dict['inter_dims'], lowest_dense_res=resolution//16)
-        inter_out_ch = inter.get_out_ch()
-        decoder_src = Decoder(inter_out_ch, param_dict['decoder_dims'], param_dict['decoder_mask_dims'])
-        decoder_dst = Decoder(inter_out_ch, param_dict['decoder_dims'], param_dict['decoder_mask_dims'])
-        if use_cuda:
-            encoder = encoder.cuda()
-            inter = inter.cuda()
-            decoder_src = decoder_src.cuda()
-            decoder_dst = decoder_dst.cuda()
-
-        opt = options['optimizer'](list(chain(*[encoder.parameters(), inter.parameters(), decoder_src.parameters(),
-                                                decoder_dst.parameters()])), lr=options['lr'])
-
-        return encoder, inter, decoder_src, decoder_dst, opt
-
-    else:
-        raise ValueError(f"Unknown model name {model_name}")
-
-
-def init_data(data_path: Path, image_size: int, batch_size: int, num_workers: int = 0):
-    d = defaultdict(lambda: [None, None])
-
-    for p in data_path.iterdir():
-        stem, ext = p.stem, p.suffix
-        if ext in ['.png', '.jpg']:
-            d[stem][0] = resize(np.asarray(Image.open(p)), (image_size, image_size, 3))
-        elif ext == '.npy':
-            d[stem][1] = resize(np.load(str(p)), (64, 64, 1))
-
-    img_mask_pairs = [[img, mask] for img, mask in d.values()]
-    dataset = MaskedDataset(img_mask_pairs, resolution=image_size)
-    return DataLoader(dataset, batch_size=batch_size, shuffle=True, num_workers=num_workers, drop_last=True)
+        return self.preprocess_pair(*self.src_idx[idx]), self.preprocess_pair(*self.dst_idx[self.idx_map[idx]])
 
 
 if __name__ == '__main__':

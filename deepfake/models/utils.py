@@ -64,7 +64,7 @@ def dssim(img1, img2, max_val, filter_size=11, filter_sigma=1.5, k1=0.01, k2=0.0
     kernel *= ( -0.5 / (filter_sigma**2) )
     kernel = np.reshape (kernel, (1,-1)) + np.reshape(kernel, (-1,1) )
     kernel = torch.from_numpy(kernel).view(1, -1)
-    kernel = F.softmax(kernel).view(1, 1, filter_size, filter_size).repeat(3, 1, 1, 1)
+    kernel = F.softmax(kernel, dim=1).view(1, 1, filter_size, filter_size).repeat(3, 1, 1, 1)
     if img1.is_cuda:
         kernel = kernel.cuda()
 
