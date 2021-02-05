@@ -4,6 +4,7 @@ from pathlib import Path
 import numpy as np
 import argparse
 from tqdm import tqdm
+import warnings
 
 
 def expand_eyebrows(lmrks, eyebrows_expand_mod=1.0):
@@ -62,12 +63,17 @@ def xyxy_to_xywh(bbox, numpy=True):
     return [int(elem) for elem in [bbox[0], bbox[1], w, h]]
 
 
-def process_frame(face_model: FaceAlignment, image_path: Path, out_path: Path):
+def process_frame(face_model: FaceAlignment, image_path: Path, out_path: Path, only_meta: bool = True):
     img = cv2.imread(str(image_path))
     detected_faces = face_model.face_detector.detect_from_image(img.copy())
     if len(detected_faces) > 1:
+        warnings.warn(f"Multiple faces detected on image {image_path}. Make sure there is only one face in each image.")
         detected_faces = [sorted(detected_faces, key=lambda face: face[-1])[-1]]
-    if len(detected_faces) == 0: return
+    if len(detected_faces) == 0:
+        image_name = image_path.absolute().stem
+        out_path_data = out_path / f'{image_name}_meta.npy'
+        np.save(str(out_path_data), np.array([0]), allow_pickle=True)
+        return
     x, y, w, h = xyxy_to_xywh(detected_faces[0][:-1])
     img = img[y:y + h, x:x + w, :]
 
@@ -79,8 +85,11 @@ def process_frame(face_model: FaceAlignment, image_path: Path, out_path: Path):
     ext = 'jpg' if 'jpg' in image_path.suffixes else 'png'
     out_path_img = out_path / f'{image_name}.{ext}'
     out_path_mask = out_path / f'{image_name}.npy'
-    cv2.imwrite(str(out_path_img), img)
-    np.save(str(out_path_mask), mask)
+    out_path_data = out_path / f'{image_name}_meta.npy'
+    if not only_meta:
+        cv2.imwrite(str(out_path_img), img)
+        np.save(str(out_path_mask), mask)
+    np.save(str(out_path_data), np.array([np.array([x, y, w, h]), landmarks]), allow_pickle=True)
 
 
 def process_folder(input_path, output_path):
@@ -103,5 +112,3 @@ if __name__ == '__main__':
     args = parser.parse_args()
 
     process_folder(args.source, args.output)
-
-
