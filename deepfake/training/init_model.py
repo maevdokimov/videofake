@@ -3,10 +3,9 @@ import numpy as np
 import torch
 from torch.optim import Adam
 from torch.utils.data import Dataset
-from PIL import Image
-from skimage.transform import resize
 import random
 from collections import defaultdict
+import cv2
 
 
 default_param = {
@@ -56,6 +55,8 @@ class PairedDataset(Dataset):
                 index[int(stem)][0] = p
             elif ext == '.npy':
                 index[int(stem)][1] = p
+            else:
+                raise NotImplementedError(f'Unknown extension {ext}')
 
         return index, len(list(filter(lambda x: index[x][0] is not None and index[x][1] is not None, index.keys())))
 
@@ -70,10 +71,14 @@ class PairedDataset(Dataset):
         return self.idx_map
 
     def preprocess_pair(self, img_path: Path, mask_path: Path):
-        img = resize(np.asarray(Image.open(img_path)), (self.resolution, self.resolution, 3))
+        img = cv2.imread(str(img_path))
+        img = cv2.cvtColor(img, cv2.COLOR_BGR2RGB) / 255.
+        img = cv2.resize(img, (self.resolution, self.resolution))
         img = torch.from_numpy(img.transpose(2, 0, 1)).float()
-        mask = resize(np.load(str(mask_path)), (self.resolution, self.resolution, 1))
-        mask = torch.from_numpy(mask.transpose(2, 0, 1)).float()
+
+        mask = cv2.resize(np.load(str(mask_path)), (self.resolution, self.resolution))
+        mask = np.expand_dims(mask, axis=2)
+        mask = torch.from_numpy(mask.transpose([2, 0, 1])).float()
 
         return img, mask
 

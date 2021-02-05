@@ -8,11 +8,75 @@ import torch
 from tqdm import tqdm
 from typing import Union
 import pytorch_lightning as pl
+from shutil import copyfile
+import cv2
 
 from deepfake.models.SAE import SAEModel
-
+from deepfake.training.merge_frame import merge_frame
 
 ModelType = Union[Path, pl.LightningModule]
+
+
+def create_vid(
+        orig_images: Path,
+        meta_path: Path,
+        output_img_path: Path,
+        output_vid_path: Path,
+        model_path: Path,
+        fps: int,
+):
+    d = merge_frames(orig_images, meta_path, output_img_path, model_path)
+    image_paths = [d[i] for i in sorted(list(d.keys()))]
+    shape = cv2.imread(str(image_paths[0])).shape
+
+    video = cv2.VideoWriter(str(output_vid_path), cv2.VideoWriter_fourcc(*'DIVX'), fps, (shape[:2:-1]))
+    for path in image_paths:
+        img = cv2.imread(str(path))
+        print(img.shape)
+        video.write(img)
+
+    cv2.destroyAllWindows()
+    video.release()
+
+
+def merge_frames(
+        orig_images: Path,
+        meta_path: Path,
+        output_path: Path,
+        model_path: Path,
+):
+    curr_suffix = None
+
+    d = {}
+    for p in orig_images.iterdir():
+        if curr_suffix is None:
+            curr_suffix = p.suffix
+        stem = int(p.stem)
+        d[stem] = [p, False]
+    for p in meta_path.iterdir():
+        splited_stem = p.stem.split('_')
+        if len(splited_stem) == 1: continue
+        stem = splited_stem[0]
+        meta = np.load(str(p), allow_pickle=True)
+        if meta == np.array([0]): continue
+        d[int(stem)] = [[d[int(stem)][0], p], True]
+
+    model = SAEModel()
+    model.load_old_checkpoint(model_path)
+
+    result = {}
+
+    for i, (item, flag) in tqdm(d.items()):
+        if not flag:
+            curr_out_path = output_path / f'{i}{item.suffix}'
+            copyfile(str(item), str(curr_out_path))
+        else:
+            curr_out_path = output_path / f'{i}{item[0].suffix}'
+            orig, meta = item
+            merge_frame(orig, meta, model, curr_out_path)
+
+        result[i] = curr_out_path
+    return result
 
 
 def create_gif(
@@ -55,15 +119,17 @@ def create_gif(
     ordered_imgs = consistent_imgs[np.argsort(consistent_keys)]
 
     images = []
-    for i in tqdm(range(ordered_imgs.shape[0])):
-        source_img = torch.from_numpy(ordered_imgs[i].transpose([2, 0, 1])).unsqueeze(0).type(torch.cuda.FloatTensor)
-        out_img, out_img_mask = model.forward_src(source_img)
-        if apply_mask:
-            out_img = out_img * out_img_mask
-        out_img = out_img.cpu().squeeze().detach().numpy()
-        out_img = np.transpose(out_img, [1, 2, 0])
-        out_img = np.concatenate([out_img, ordered_imgs[i]], axis=0)
-        images.append(out_img)
+    with torch.no_grad():
+        for i in tqdm(range(ordered_imgs.shape[0])):
+            source_img = torch.from_numpy(ordered_imgs[i].transpose([2, 0, 1]))\
+                .unsqueeze(0).type_as(next(model.parameters()))
+            out_img, out_img_mask = model.forward_src(source_img)
+            if apply_mask:
+                out_img = out_img * out_img_mask
+            out_img = out_img.cpu().squeeze().detach().numpy()
+            out_img = np.transpose(out_img, [1, 2, 0])
+            out_img = np.concatenate([out_img, ordered_imgs[i]], axis=0)
+            images.append(out_img)
 
     with imageio.get_writer(str(output_path), mode='I') as writer:
         for image in images:
@@ -72,9 +138,13 @@ def create_gif(
 
 if __name__ == '__main__':
     parser = argparse.ArgumentParser()
-    parser.add_argument('--src-path', '--src_path', required=True)
-    parser.add_argument('--output-path', '--output_path', required=True)
+    parser.add_argument('--src-images', '--src_images', required=True)
+    parser.add_argument('--meta-path', '--meta_path', required=True)
+    parser.add_argument('--output-img', '--output_img', required=True)
+    parser.add_argument('--output-vid', '--output_vid', required=True)
     parser.add_argument('--model-path', '--model_path', required=True)
+    parser.add_argument('--fps', required=True)
     args = parser.parse_args()
 
-    create_gif(Path(args.src_path), Path(args.output_path), Path(args.model_path))
+    create_vid(Path(args.src_images), Path(args.meta_path), Path(args.output_img),
+               Path(args.output_vid), Path(args.model_path), int(args.fps))
