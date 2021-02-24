@@ -1,19 +1,17 @@
 import torch
 import torch.nn as nn
-import torch.nn.functional as F
 import numpy as np
 import pytorch_lightning as pl
 from torch.utils.data import DataLoader
 from torch.optim import Adam
 from torchvision.utils import make_grid
 import matplotlib.pyplot as plt
-from itertools import chain
 
 from pathlib import Path
 
-from deepfake.models.utils import same_pad
-from deepfake.training.init_model import PairedDataset
-from deepfake.models.utils import gaussian_blur, dssim
+from src.deepfake.models.utils import same_pad
+from src.deepfake.training.init_model import PairedDataset
+from src.deepfake.models.utils import gaussian_blur, dssim
 
 
 class Downscale(nn.Module):

@@ -11,8 +11,8 @@ import pytorch_lightning as pl
 from shutil import copyfile
 import cv2
 
-from deepfake.models.SAE import SAEModel
-from deepfake.training.merge_frame import merge_frame
+from src.deepfake.models.SAE import SAEModel
+from src.deepfake.training.merge_frame import merge_frame
 
 ModelType = Union[Path, pl.LightningModule]
 

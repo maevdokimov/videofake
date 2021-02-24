@@ -4,8 +4,8 @@ import pytorch_lightning as pl
 import torch
 import cv2
 
-from face_dataset.process_face import get_image_hull_mask
-from deepfake.models.SAE import SAEModel
+from src.face_dataset.process_face import get_image_hull_mask
+from src.deepfake.models.SAE import SAEModel
 
 
 def _scale_array(arr, clip=True):

@@ -1,14 +1,13 @@
 import numpy as np
 import torch
-from torch.utils.data import ConcatDataset, DataLoader
+from torch.utils.data import DataLoader
 from torch.optim import Adam
 
-from deepfake.misc.models.ConvolutionalVAE import DeepfakeVAE
+from src.deepfake.misc.models.ConvolutionalVAE import DeepfakeVAE
 from face_dataset.face_autoencoder import loss_vae, construct_dataset
-from face_dataset.utils import FacesDataset, plot_gallery
+from face_dataset.utils import plot_gallery
 
 import time
-import matplotlib.pyplot as plt
 
 IMAGE_SIZE = 128
 LOG_SQRT_2PI = np.log(np.sqrt(2 * np.pi))
