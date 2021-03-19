@@ -10,7 +10,7 @@ import matplotlib.pyplot as plt
 from pathlib import Path
 
 from src.deepfake.models.utils import same_pad
-from src.deepfake.training.init_model import PairedDataset
+from src.deepfake.DFL.training.init_model import PairedDataset
 from src.deepfake.models.utils import gaussian_blur, dssim
 
 

@@ -3,7 +3,7 @@ import argparse
 import pytorch_lightning as pl
 from pytorch_lightning.callbacks import ModelCheckpoint
 
-from src.deepfake.models.SAE import SAEModel
+from src.deepfake.DFL.models.SAE import SAEModel
 
 
 if __name__ == '__main__':

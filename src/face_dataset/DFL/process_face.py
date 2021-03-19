@@ -6,7 +6,7 @@ import argparse
 from tqdm import tqdm
 import warnings
 
-from src.face_dataset.landmarks_utils import get_transform_mat, transform_points
+from src.face_dataset.DFL.landmarks_utils import get_transform_mat, transform_points
 
 
 def process_frame(face_model: FaceAlignment, image_path: Path, out_path: Path, image_size: int):
