@@ -90,7 +90,3 @@ def prepare_embeddings(paths: List[Path], pickle_path: Union[Path, None]):
         with open(pickle_path, 'wb') as file:
             pickle.dump(emb_dict, file, protocol=pickle.HIGHEST_PROTOCOL)
     return emb_dict
-
-
-if __name__ == '__main__':
-    test_pretrained(Path('/home/maxim/python/deepfake-tools/data/data512x512/00001.jpg'))
