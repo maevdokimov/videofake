@@ -135,4 +135,4 @@ dmypy.json
 .ipynb_checkpoints
 
 # Data
-data/*
+#data/*

@@ -2,7 +2,7 @@ import numpy as np
 import numpy.linalg as npla
 import cv2
 
-from src.utils.umeyama import umeyama
+from src.DFL.utils.umeyama import umeyama
 
 # https://github.com/iperov/DeepFaceLab/blob/master/facelib/LandmarksProcessor.py
 
