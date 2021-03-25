@@ -6,6 +6,7 @@ import insightface
 import numpy as np
 
 import pickle
+from tqdm import tqdm
 import warnings
 from pathlib import Path
 from typing import List, Union, Dict
@@ -52,7 +53,7 @@ class FaceDataset(Dataset):
 def test_pretrained(img_path: Path):
     img = cv2.imread(str(img_path))
     model = insightface.app.FaceAnalysis()
-    model.prepare(ctx_id=-1)
+    model.prepare(ctx_id=0)
 
     faces = model.get(img)
     for idx, face in enumerate(faces):
@@ -72,21 +73,31 @@ def test_pretrained(img_path: Path):
 def prepare_embeddings(paths: List[Path], pickle_path: Union[Path, None]):
     emb_dict = {}
     model = insightface.app.FaceAnalysis()
-    model.prepare(ctx_id=-1)
+    model.prepare(ctx_id=0)
 
-    for p in paths:
-        for img_path in p.iterdir():
-            img = cv2.imread(str(img_path))
-            faces = model.get(img)
-            if len(faces) == 0:
-                warnings.warn(f"No faces detected on image {img_path}")
-                continue
-            if len(faces) > 1:
-                warnings.warn(f"Multiple faces detected on image {img_path}")
-            faces = sorted(faces, key=lambda x: x.det_score, reverse=True)
-            emb_dict[str(img_path)] = faces[0].embedding
+    paths = [img_path for p in paths for img_path in p.iterdir()]
+    for img_path in tqdm(paths):
+        img = cv2.imread(str(img_path))
+        faces = model.get(img)
+        if len(faces) == 0:
+            warnings.warn(f"No faces detected on image {img_path}")
+            continue
+        if len(faces) > 1:
+            warnings.warn(f"Multiple faces detected on image {img_path}")
+        faces = sorted(faces, key=lambda x: x.det_score, reverse=True)
+        emb_dict[str(img_path)] = faces[0].embedding
 
     if pickle_path is not None:
         with open(pickle_path, 'wb') as file:
             pickle.dump(emb_dict, file, protocol=pickle.HIGHEST_PROTOCOL)
     return emb_dict
+
+
+if __name__ == '__main__':
+    paths = [Path('/home/maxim/python/deepfake-tools/data/data512x512'),
+             Path('/home/maxim/python/deepfake-tools/data/resized')]
+    paths_union = [img_path for p in paths for img_path in p.iterdir()]
+    emb_dict = prepare_embeddings(paths, None)
+
+    dataset = FaceDataset(paths_union, 256, True, emb_dict)
+    print(dataset[0])
