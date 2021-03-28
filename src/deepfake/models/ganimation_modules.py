@@ -1,5 +1,6 @@
 import torch
 import torch.nn as nn
+from torch.optim import lr_scheduler
 
 import functools
 
@@ -16,6 +17,28 @@ def get_norm_layer(norm_type='instance'):
     else:
         raise NotImplementedError('normalization layer [%s] is not found' % norm_type)
     return norm_layer
+
+
+def get_scheduler(
+        optimizer,
+        lr_policy,
+        epoch_count,
+        niter,
+        niter_decay,
+        lr_decay_iters
+    ):
+    if lr_policy == 'lambda':
+        def lambda_rule(epoch):
+            lr_l = 1.0 - max(0, epoch + 1 + epoch_count - niter) / float(niter_decay + 1)
+            return lr_l
+        scheduler = lr_scheduler.LambdaLR(optimizer, lr_lambda=lambda_rule)
+    elif lr_policy == 'step':
+        scheduler = lr_scheduler.StepLR(optimizer, step_size=lr_decay_iters, gamma=0.1)
+    elif lr_policy == 'plateau':
+        scheduler = lr_scheduler.ReduceLROnPlateau(optimizer, mode='min', factor=0.2, threshold=0.01, patience=5)
+    else:
+        return NotImplementedError('learning rate policy [%s] is not implemented', lr_policy)
+    return scheduler
 
 
 class ResnetBlock(nn.Module):
@@ -170,3 +193,51 @@ class Discriminator(nn.Module):
         pred_aus = self.aus_top(embed_features)
         return pred_map.squeeze(), pred_aus.squeeze()
 
+
+class TVLoss(nn.Module):
+    def __init__(self, TVLoss_weight=1):
+        super(TVLoss,self).__init__()
+        self.TVLoss_weight = TVLoss_weight
+
+    def forward(self,x):
+        batch_size = x.size()[0]
+        h_x = x.size()[2]
+        w_x = x.size()[3]
+        count_h = self._tensor_size(x[:,:,1:,:])
+        count_w = self._tensor_size(x[:,:,:,1:])
+        h_tv = torch.pow((x[:,:,1:,:]-x[:,:,:h_x-1,:]),2).sum()
+        w_tv = torch.pow((x[:,:,:,1:]-x[:,:,:,:w_x-1]),2).sum()
+        return self.TVLoss_weight*2*(h_tv/count_h+w_tv/count_w)/batch_size
+
+    def _tensor_size(self,t):
+        return t.size()[1]*t.size()[2]*t.size()[3]
+
+
+class GANLoss(nn.Module):
+    def __init__(self, gan_type='wgan-gp', target_real_label=1.0, target_fake_label=0.0):
+        super(GANLoss, self).__init__()
+        self.register_buffer('real_label', torch.tensor(target_real_label))
+        self.register_buffer('fake_label', torch.tensor(target_fake_label))
+        self.gan_type = gan_type
+        if self.gan_type == 'wgan-gp':
+            self.loss = lambda x, y: -torch.mean(x) if y else torch.mean(x)
+        elif self.gan_type == 'lsgan':
+            self.loss = nn.MSELoss()
+        elif self.gan_type == 'gan':
+            self.loss = nn.BCELoss()
+        else:
+            raise NotImplementedError('GAN loss type [%s] is not found' % gan_type)
+
+    def get_target_tensor(self, input, target_is_real):
+        if target_is_real:
+            target_tensor = self.real_label
+        else:
+            target_tensor = self.fake_label
+        return target_tensor.expand_as(input)
+
+    def __call__(self, input, target_is_real):
+        if self.gan_type == 'wgan-gp':
+            target_tensor = target_is_real
+        else:
+            target_tensor = self.get_target_tensor(input, target_is_real)
+        return self.loss(input, target_tensor)
